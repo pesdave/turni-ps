@@ -157,4 +157,38 @@ with tab_turni:
             gg_l = len([d for d in range(1, num_gg+1) if date(anno_sel, mese_sel, d).weekday() < 5 and date(anno_sel, mese_sel, d) not in festivi])
             debito = (gg_l * DEBITO_GG) * (inf["PT"]/100) - inf["H104"]
             
-            rep_data.append({"Infermiere": inf["Nome"], "Contratto": f"{inf['PT']}%", "Debito": round(debito, 1), "Fatte": round(fatte, 1), "Saldo": round(fatte-debito,
+            rep_data.append({"Infermiere": inf["Nome"], "Contratto": f"{inf['PT']}%", "Debito": round(debito, 1), "Fatte": round(fatte, 1), "Saldo": round(fatte-debito, 1)})
+        st.dataframe(pd.DataFrame(rep_data), use_container_width=True)
+
+    with col_sug:
+        st.markdown('<div class="suggeritore-panel">', unsafe_allow_html=True)
+        st.subheader("🚑 Suggeritore Live Sostituzioni")
+        g_buco = st.selectbox("Seleziona Giorno", giorni, key="g_sug")
+        t_buco = st.selectbox("Cosa devi coprire?", ["PS/OBI", "Ambulanza MSA1"], key="t_sug")
+        
+        candidati = []
+        for n in nomi_staff:
+            inf = st.session_state.staff[st.session_state.staff["Nome"] == n].iloc[0]
+            if grid_res.loc[n, g_buco] == "":
+                # Filtro MSA per ambulanza
+                if t_buco == "Ambulanza MSA1" and not inf["MSA1"]: continue
+                # Filtro Coordinatore (non suggerire Merolla per PS)
+                if inf["Ruolo"] == "Coordinatore": continue
+                
+                # Calcolo saldo veloce
+                saldo = next(item["Saldo"] for item in rep_data if item["Infermiere"] == n)
+                candidati.append({"Nome": n, "Saldo Ore": saldo})
+        
+        if candidati:
+            st.write("✅ Personale idoneo e libero (dal più scarico):")
+            st.table(pd.DataFrame(candidati).sort_values("Saldo Ore"))
+        else:
+            st.write("❌ Nessun profilo idoneo trovato.")
+        st.markdown('</div>', unsafe_allow_html=True)
+
+# --- EXPORT ---
+if st.sidebar.button("📥 Esporta Report Excel"):
+    buf = io.BytesIO()
+    with pd.ExcelWriter(buf, engine='xlsxwriter') as wr:
+        grid_res.to_excel(wr, sheet_name='Turni')
+    st.sidebar.download_button("Scarica", buf.getvalue(), f"Turni_{mese_sel}_{anno_sel}.xlsx")
