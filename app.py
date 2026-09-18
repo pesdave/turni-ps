@@ -3,21 +3,20 @@ import pandas as pd
 import calendar
 from datetime import date, datetime
 import io
+import random
 
 # --- CONFIGURAZIONE PAGINA ---
-st.set_page_config(layout="wide", page_title="ShiftMaster PS Sondalo-Tirano", page_icon="🏥")
+st.set_page_config(layout="wide", page_title="ShiftMaster Pro", page_icon="🏥")
 
 # --- COSTANTI ---
 ORE_TURNO = 12.25
 ORE_DEBITO_GG = 7.2
-CODICI_TURNO = [
-    "", "G12", "N12", "G12B", "N12B", "GTI", "NTI", "GSL", "NSL", 
-    "GBO", "NBO", "AO:2", "AO:4", "AO:6", "AO:8", "PEDI", "MAL", "FERIE", "R", "SN"
-]
+PATRONO = (6, 19)
+
+CODICI_TURNO = ["", "G12", "N12", "G12B", "N12B", "GTI", "NTI", "GSL", "NSL", "GBO", "NBO", "AO:6", "PEDI", "MAL", "FERIE", "R", "SN"]
 
 # --- FUNZIONI DI CALCOLO ---
 def get_festivita(anno):
-    # Calcolo base festività italiane + Patrono Sondrio (19/06)
     return [date(anno, 1, 1), date(anno, 1, 6), date(anno, 4, 25), date(anno, 5, 1), 
             date(anno, 6, 2), date(anno, 6, 19), date(anno, 8, 15), date(anno, 11, 1), 
             date(anno, 12, 8), date(anno, 12, 25), date(anno, 12, 26)]
@@ -32,12 +31,10 @@ def calcola_debito_mensile(mese, anno, pt=100, ore_104=0):
             giorni_feriali += 1
     return round((giorni_feriali * ORE_DEBITO_GG * (pt/100)) - ore_104, 2)
 
-# --- INIZIALIZZAZIONE STAFF (LISTA COMPLETA DAL PDF) ---
+# --- INIZIALIZZAZIONE STAFF ---
 if 'staff' not in st.session_state:
     data_staff = [
-        # Coordinatore
         {"Nome": "MEROLLA MASSIMO", "MSA1": True, "MSA2": True, "Notti": True, "PT": 100, "H104": 0, "Gruppo": "Coordinatore"},
-        # Infermieri PS
         {"Nome": "BALDO GABRIELE", "MSA1": True, "MSA2": False, "Notti": True, "PT": 100, "H104": 0, "Gruppo": "Infermieri"},
         {"Nome": "BROGGINI CHARLOTTE", "MSA1": True, "MSA2": False, "Notti": True, "PT": 100, "H104": 0, "Gruppo": "Infermieri"},
         {"Nome": "CANCLINI FEDERICA", "MSA1": True, "MSA2": False, "Notti": True, "PT": 100, "H104": 0, "Gruppo": "Infermieri"},
@@ -57,7 +54,6 @@ if 'staff' not in st.session_state:
         {"Nome": "PESARO DAVIDE", "MSA1": True, "MSA2": False, "Notti": True, "PT": 100, "H104": 0, "Gruppo": "Infermieri"},
         {"Nome": "SCARAMUZZI JACOPO", "MSA1": True, "MSA2": False, "Notti": True, "PT": 100, "H104": 0, "Gruppo": "Infermieri"},
         {"Nome": "STEDILE PATRIZIA", "MSA1": True, "MSA2": False, "Notti": True, "PT": 100, "H104": 0, "Gruppo": "Infermieri"},
-        # Turni Bormio
         {"Nome": "BELTRACCHI VITTORIA", "MSA1": True, "MSA2": True, "Notti": True, "PT": 100, "H104": 0, "Gruppo": "Bormio"},
         {"Nome": "BORSERINI FRANCESCA", "MSA1": True, "MSA2": True, "Notti": True, "PT": 100, "H104": 0, "Gruppo": "Bormio"},
         {"Nome": "CAPELLI GIOVANNA", "MSA1": True, "MSA2": True, "Notti": True, "PT": 100, "H104": 0, "Gruppo": "Bormio"},
@@ -66,131 +62,95 @@ if 'staff' not in st.session_state:
     ]
     st.session_state.staff = pd.DataFrame(data_staff)
 
-# --- INTERFACCIA TABS ---
-tab_turni, tab_anagrafica, tab_analisi = st.tabs(["🗓️ Turni Mensili", "👥 Anagrafica Personale", "📊 Calcolo Debito & Ore"])
+# --- TABS ---
+tab_turni, tab_anagrafica, tab_analisi = st.tabs(["🗓️ Griglia Turni", "👥 Gestione Personale", "📊 Analisi & Copertura"])
 
-# --- TAB ANAGRAFICA ---
+# --- ANAGRAFICA ---
 with tab_anagrafica:
-    st.header("Configurazione Personale")
-    st.info("Qui puoi modificare le competenze, i part-time o aggiungere nuovi colleghi.")
-    updated_staff = st.data_editor(st.session_state.staff, num_rows="dynamic", use_container_width=True)
-    st.session_state.staff = updated_staff
+    st.header("Anagrafica Personale")
+    st.session_state.staff = st.data_editor(st.session_state.staff, num_rows="dynamic", use_container_width=True)
 
-# --- TAB TURNI ---
+# --- TURNI ---
 with tab_turni:
-    col_m, col_a = st.columns(2)
-    mese = col_m.selectbox("Mese", range(1, 13), index=datetime.now().month - 1, key="sel_mese")
-    anno = col_a.number_input("Anno", value=2026, key="sel_anno")
+    col1, col2, col3 = st.columns([1, 1, 2])
+    mese = col1.selectbox("Mese", range(1, 13), index=datetime.now().month-1)
+    anno = col2.number_input("Anno", value=2026)
     
     num_gg = calendar.monthrange(anno, mese)[1]
-    colonne_gg = [f"{d}" for d in range(1, num_gg + 1)]
-    elenco_nomi = st.session_state.staff["Nome"].tolist()
+    giorni = [f"{d}" for d in range(1, num_gg+1)]
+    nomi = st.session_state.staff["Nome"].tolist()
     
-    # Inizializzazione sicura della griglia
     if 'griglia' not in st.session_state or st.session_state.get('last_m') != mese:
-        st.session_state.griglia = pd.DataFrame("", index=elenco_nomi, columns=colonne_gg)
+        st.session_state.griglia = pd.DataFrame("", index=nomi, columns=giorni)
         st.session_state.last_m = mese
-    
-    # Sincronizzazione righe (se aggiungo/tolgo in anagrafica)
-    st.session_state.griglia = st.session_state.griglia.reindex(elenco_nomi).fillna("")
-    
-    st.subheader("Inserimento Turni")
-    st.caption("Fai doppio clic su una cella per selezionare il turno dal menu a tendina.")
-    
-    # Configurazione colonne per menu a tendina
-    config_colonne = {
-        c: st.column_config.SelectboxColumn(c, options=CODICI_TURNO, width="small") 
-        for d, c in enumerate(colonne_gg)
-    }
-    
-    grid_final = st.data_editor(
-        st.session_state.griglia,
-        column_config=config_colonne,
-        use_container_width=True,
-        key="main_grid"
-    )
-    st.session_state.griglia = grid_final
 
-# --- TAB ANALISI ---
+    st.session_state.griglia = st.session_state.griglia.reindex(nomi).fillna("")
+
+    # --- TASTO GENERA ---
+    if st.button("🪄 GENERA TURNI AUTOMATICI (RIEMPI BUCHI)"):
+        with st.spinner("L'algoritmo sta calcolando la distribuzione equa..."):
+            for d in giorni:
+                turni_necessari = ["G12", "G12", "G12", "N12", "N12", "N12", "G12B", "N12B", "GTI", "NTI", "GSL", "NSL"]
+                random.shuffle(turni_necessari)
+                
+                for t in turni_necessari:
+                    # Se il turno è già coperto in questo giorno, passiamo al prossimo
+                    if (st.session_state.griglia[d] == t).any(): continue
+                    
+                    # Troviamo chi può farlo
+                    candidati = st.session_state.staff.copy()
+                    # Filtri: non deve lavorare già, deve avere MSA se serve, deve avere Notti se serve
+                    candidati = candidati[~candidati["Nome"].isin(st.session_state.griglia.index[st.session_state.griglia[d] != ""])]
+                    if t in ["GTI", "NTI", "GSL", "NSL"]: candidati = candidati[candidati["MSA1"] == True]
+                    if t in ["GBO", "NBO"]: candidati = candidati[candidati["MSA2"] == True]
+                    if "N" in t: candidati = candidati[candidati["Notti"] == True]
+                    
+                    if not candidati.empty:
+                        scelto = random.choice(candidati["Nome"].tolist())
+                        st.session_state.griglia.at[scelto, d] = t
+        st.success("Turni generati! Ora puoi rifinirli manualmente.")
+
+    # --- DATA EDITOR ---
+    config = {g: st.column_config.SelectboxColumn(g, options=CODICI_TURNO, width="small") for g in giorni}
+    grid_edit = st.data_editor(st.session_state.griglia, column_config=config, use_container_width=True, height=800)
+    st.session_state.griglia = grid_edit
+
+# --- ANALISI & COPERTURA ---
 with tab_analisi:
-    st.header("Bilancio Orario Real-Time")
-    
+    st.header("Verifica Copertura Giornaliera")
+    check = []
+    for d in giorni:
+        c = grid_edit[d].tolist()
+        check.append({
+            "Giorno": d,
+            "PS G12 (req 3)": c.count("G12"),
+            "PS N12 (req 3)": c.count("N12"),
+            "OBI (req 1+1)": f"{c.count('G12B')}+{c.count('N12B')}",
+            "Amb (req 4)": c.count("GTI")+c.count("NTI")+c.count("GSL")+c.count("NSL")
+        })
+    st.dataframe(pd.DataFrame(check).set_index("Giorno").T, use_container_width=True)
+
+    st.header("Bilancio Ore Mensili")
     report = []
     for _, inf in st.session_state.staff.iterrows():
-        nome = inf['Nome']
-        h_lavorate = 0
-        h_pedi = 0
-        
-        # Calcolo sicuro delle ore
-        if nome in grid_final.index:
-            riga = grid_final.loc[nome]
-            for val in riga:
-                if any(x in str(val) for x in ["G12", "N12", "GTI", "NTI", "GSL", "NSL", "GBO", "NBO"]):
-                    h_lavorate += ORE_TURNO
-                elif "AO:" in str(val):
-                    try: h_lavorate += float(val.split(":")[1])
-                    except: pass
-                elif "PEDI" in str(val):
-                    h_pedi += ORE_TURNO
-        
-        debito = calcola_debito_mensile(mese, anno, inf['PT'], inf['H104'])
-        bilancio = h_lavorate - debito
-        
-        report.append({
-            "Nome": nome,
-            "Debito Mensile": debito,
-            "Ore Effettive": h_lavorate,
-            "Bilancio (+/-)": round(bilancio, 2),
-            "PEDI Totali": h_pedi,
-            "Stato": "PREMIANTE (P)" if bilancio > 0 else "DEBITO"
-        })
+        ore = sum([ORE_TURNO for t in grid_edit.loc[inf["Nome"]] if any(x in str(t) for x in ["G12", "N12", "GTI", "NTI", "GSL", "NSL", "GBO", "NBO"])])
+        ore += sum([float(str(t).split(":")[1]) for t in grid_edit.loc[inf["Nome"]] if "AO:" in str(t)])
+        debito = calcola_debito_mensile(mese, anno, inf["PT"], inf["H104"])
+        report.append({"Nome": inf["Nome"], "Debito": debito, "Fatte": ore, "Saldo": round(ore-debito, 2)})
     
-    df_report = pd.DataFrame(report)
-    
-    # Formattazione colori
-    def color_bilancio(val):
-        color = 'red' if val < 0 else 'green'
-        return f'color: {color}; font-weight: bold'
+    df_rep = pd.DataFrame(report)
+    st.table(df_rep)
 
-    st.dataframe(df_report.style.applymap(color_bilancio, subset=['Bilancio (+/-)']), use_container_width=True)
+    st.header("🚑 Suggeritore Sostituzioni")
+    g_buco = st.selectbox("In quale giorno manca personale?", giorni)
+    if st.button("Suggerisci chi può coprire"):
+        liberi = st.session_state.staff[~st.session_state.staff["Nome"].isin(grid_edit.index[grid_edit[g_buco] != ""])]
+        st.write("Persone libere e disponibili quel giorno:")
+        st.dataframe(liberi[["Nome", "MSA1", "MSA2", "Notti"]])
 
-    # Suggeritore Sostituzioni
-    st.divider()
-    st.subheader("🚑 Suggeritore per Sostituzioni")
-    col_s1, col_s2 = st.columns(2)
-    g_buco = col_s1.selectbox("Giorno del buco", colonne_gg)
-    p_buco = col_s2.selectbox("Tipo di postazione", ["PS/OBI", "Ambulanza (MSA1)", "Bormio (MSA2)"])
-    
-    if st.button("Trova chi può coprire il turno"):
-        candidati = []
-        for _, r in st.session_state.staff.iterrows():
-            nome = r['Nome']
-            # Non deve già lavorare quel giorno
-            if grid_final.loc[nome, g_buco] == "":
-                # Controllo MSA
-                idoneo = True
-                if "Ambulanza" in p_buco and not r['MSA1']: idoneo = False
-                if "Bormio" in p_buco and not r['MSA2']: idoneo = False
-                
-                if idoneo:
-                    bil = df_report.loc[df_report['Nome'] == nome, 'Bilancio (+/-)'].values[0]
-                    candidati.append({"Infermiere": nome, "Bilancio Ore": bil})
-        
-        if candidati:
-            st.table(pd.DataFrame(candidati).sort_values("Bilancio Ore"))
-        else:
-            st.error("Nessun sostituto disponibile per i criteri selezionati.")
-
-# --- SIDEBAR EXPORT ---
-st.sidebar.header("💾 Salvataggio")
-if st.sidebar.button("Genera Excel Professionale"):
-    buffer = io.BytesIO()
-    with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
-        grid_final.to_excel(writer, sheet_name='Turni')
-        df_report.to_excel(writer, sheet_name='Conteggio_Ore')
-    st.sidebar.download_button(
-        label="📥 Scarica File",
-        data=buffer.getvalue(),
-        file_name=f"Turni_PS_{mese}_{anno}.xlsx",
-        mime="application/vnd.ms-excel"
-    )
+# --- EXPORT ---
+if st.sidebar.button("💾 Scarica Excel"):
+    buf = io.BytesIO()
+    with pd.ExcelWriter(buf, engine='xlsxwriter') as wr:
+        grid_edit.to_excel(wr, sheet_name='Turni')
+    st.sidebar.download_button("📥 Download", buf.getvalue(), f"Turni_{mese}_{anno}.xlsx")
