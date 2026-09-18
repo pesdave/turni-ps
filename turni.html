@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PRO-Shift v4.0 | Sondalo-Tirano</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        .shift-G12 { background-color: #fbbf24; color: black; font-weight: bold; }
+        .shift-N12 { background-color: #1e293b; color: white; font-weight: bold; }
+        .shift-AMB { background-color: #10b981; color: white; font-weight: bold; }
+        .shift-OBI { background-color: #3b82f6; color: white; font-weight: bold; }
+        .shift-G { background-color: #e2e8f0; color: #1e293b; }
+        .shift-SN { background-color: #fca5a5; color: white; }
+        .shift-R { background-color: #d1d5db; color: #4b5563; }
+        table th, table td { border: 1px solid #e2e8f0; padding: 4px; text-align: center; font-size: 11px; min-width: 45px; }
+        .sticky-col { position: sticky; left: 0; background: white; z-index: 10; min-width: 150px; text-align: left; }
+    </style>
+</head>
+<body class="bg-gray-50 p-4 font-sans">
+
+    <div class="max-w-[98%] mx-auto bg-white rounded-xl shadow-2xl p-6">
+        <header class="flex justify-between items-center mb-6 border-b pb-4">
+            <div>
+                <h1 class="text-3xl font-extrabold text-blue-900">🏥 PRO-Shift v4.0</h1>
+                <p class="text-gray-500">Gestione Avanzata Pronto Soccorso Sondalo-Tirano</p>
+            </div>
+            <div class="flex gap-4">
+                <select id="mese" class="p-2 border rounded shadow-sm"></select>
+                <button onclick="generaTurni()" class="bg-amber-500 hover:bg-amber-600 text-white font-bold py-2 px-6 rounded-lg shadow-lg transition-all transform hover:scale-105">✨ GENERA TURNI EQUILIBRATI</button>
+                <button onclick="esportaExcel()" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-6 rounded-lg shadow-lg">📥 EXCEL</button>
+            </div>
+        </header>
+
+        <!-- GRIGLIA TURNI -->
+        <div class="overflow-x-auto border rounded-lg shadow-inner mb-8 bg-white" style="max-height: 600px;">
+            <table class="w-full border-collapse" id="tabellaTurni">
+                <thead class="bg-gray-100 sticky top-0 z-20">
+                    <tr id="headerGiorni">
+                        <th class="sticky-col">Personale</th>
+                    </tr>
+                </thead>
+                <tbody id="bodyTurni"></tbody>
+            </table>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <!-- REPORT ORE -->
+            <div class="bg-white p-6 rounded-xl border shadow-sm">
+                <h2 class="text-xl font-bold mb-4 text-blue-800 border-b pb-2">⚖️ Bilancio Ore Mensili</h2>
+                <div class="overflow-auto max-h-[400px]">
+                    <table class="w-full text-left">
+                        <thead>
+                            <tr class="bg-gray-50"><th>Nome</th><th>Contratto</th><th>Debito</th><th>Fatte</th><th>Saldo</th></tr>
+                        </thead>
+                        <tbody id="bodyReport"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- ANAGRAFICA -->
+            <div class="bg-white p-6 rounded-xl border shadow-sm">
+                <h2 class="text-xl font-bold mb-4 text-blue-800 border-b pb-2">👥 Configurazione Personale</h2>
+                <div class="overflow-auto max-h-[400px]">
+                    <table class="w-full text-left">
+                        <thead>
+                            <tr class="bg-gray-50"><th>Nome</th><th>Ruolo</th><th>MSA1</th><th>Notti</th><th>PT%</th></tr>
+                        </thead>
+                        <tbody id="bodyStaff"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const STAFF = [
+            { id: 1, nome: "MEROLLA MASSIMO", ruolo: "Coordinatore", msa1: true, notti: true, pt: 100, h104: 0 },
+            { id: 2, nome: "BALDO GABRIELE", ruolo: "Inf", msa1: true, notti: true, pt: 100, h104: 0 },
+            { id: 3, nome: "BROGGINI CHARLOTTE", ruolo: "Inf", msa1: true, notti: true, pt: 100, h104: 0 },
+            { id: 4, nome: "CANCLINI FEDERICA", ruolo: "Inf", msa1: true, notti: true, pt: 100, h104: 0 },
+            { id: 5, nome: "FRANZINI MARTINO", ruolo: "Inf", msa1: true, notti: true, pt: 100, h104: 0 },
+            { id: 6, nome: "GHILOTTI PAOLO", ruolo: "Inf", msa1: true, notti: true, pt: 100, h104: 0 },
+            { id: 7, nome: "PIETROGIOVANNA CHIARA", ruolo: "Inf", msa1: true, notti: true, pt: 100, h104: 0 },
+            { id: 8, nome: "POLETTI RIZZI ALESSIA", ruolo: "Inf", msa1: true, notti: true, pt: 100, h104: 0 },
+            { id: 9, nome: "RODIGARI GIULIA", ruolo: "Inf", msa1: true, notti: true, pt: 100, h104: 0 },
+            { id: 10, nome: "SPINI NADIA", ruolo: "Inf", msa1: true, notti: true, pt: 100, h104: 0 },
+            { id: 11, nome: "BARBARO GALANTINO SILVIA", ruolo: "Inf", msa1: true, notti: true, pt: 100, h104: 0 },
+            { id: 12, nome: "CRUPI CARMEN", ruolo: "Inf", msa1: true, notti: true, pt: 100, h104: 0 },
+            { id: 13, nome: "GAMBARRI CRISTINA", ruolo: "Inf", msa1: true, notti: true, pt: 100, h104: 0 },
+            { id: 14, nome: "GERALI ALESSIA", ruolo: "Inf", msa1: true, notti: true, pt: 100, h104: 0 },
+            { id: 15, nome: "INNOCENTI DANIELA", ruolo: "Inf", msa1: true, notti: true, pt: 100, h104: 0 },
+            { id: 16, nome: "MIOTTI SOFIA", ruolo: "Inf", msa1: true, notti: true, pt: 100, h104: 0 },
+            { id: 17, nome: "PANIZZA CATERINA", ruolo: "Inf", msa1: true, notti: true, pt: 100, h104: 0 },
+            { id: 18, nome: "PESARO DAVIDE", ruolo: "Inf", msa1: true, notti: true, pt: 100, h104: 0 },
+            { id: 19, nome: "SCARAMUZZI JACOPO", ruolo: "Inf", msa1: true, notti: true, pt: 100, h104: 0 },
+            { id: 20, nome: "STEDILE PATRIZIA", ruolo: "Inf", msa1: true, notti: true, pt: 100, h104: 0 }
+        ];
+
+        const CODICI = ["", "G12", "N12", "G12B", "N12B", "GTI", "NTI", "GSL", "NSL", "GBO", "NBO", "R", "SN", "FERIE", "MAL", "PEDI", "AO"];
+        let ROSTER = {}; // Formato: { "1-2026-05-1": "G12" }
+
+        // Setup Iniziale
+        const meseSel = document.getElementById('mese');
+        for(let i=0; i<12; i++) {
+            let opt = document.createElement('option');
+            opt.value = i;
+            opt.text = new Date(2026, i).toLocaleString('it', {month: 'long'}).toUpperCase();
+            meseSel.appendChild(opt);
+        }
+        meseSel.value = new Date().getMonth();
+
+        function renderGrid() {
+            const m = parseInt(meseSel.value);
+            const y = 2026;
+            const daysInMonth = new Date(y, m + 1, 0).getDate();
+            
+            // Header
+            const header = document.getElementById('headerGiorni');
+            header.innerHTML = '<th class="sticky-col">Personale</th>';
+            for(let d=1; d<=daysInMonth; d++) {
+                const date = new Date(y, m, d);
+                const isWE = date.getDay() === 0 || date.getDay() === 6;
+                header.innerHTML += `<th class="${isWE ? 'bg-orange-100' : ''}">${d}<br>${date.toLocaleString('it', {weekday: 'short'})}</th>`;
+            }
+
+            // Body
+            const body = document.getElementById('bodyTurni');
+            body.innerHTML = '';
+            STAFF.forEach(inf => {
+                let row = `<tr><td class="sticky-col font-bold">${inf.nome}</td>`;
+                for(let d=1; d<=daysInMonth; d++) {
+                    const key = `${inf.id}-${y}-${m}-${d}`;
+                    const val = ROSTER[key] || "";
+                    let cls = val ? `shift-${val.replace('12B', 'OBI').replace('G12', 'G12').replace('N12', 'N12').slice(0,3)}` : '';
+                    if(val === 'G') cls = 'shift-G';
+                    if(val === 'SN') cls = 'shift-SN';
+                    if(val === 'R') cls = 'shift-R';
+                    row += `<td><select onchange="updateShift('${key}', this.value)" class="w-full h-full bg-transparent border-none ${cls}">
+                        ${CODICI.map(c => `<option value="${c}" ${val===c ? 'selected' : ''}>${c}</option>`).join('')}
+                        <option value="G" ${val==='G' ? 'selected' : ''}>G</option>
+                    </select></td>`;
+                }
+                row += `</tr>`;
+                body.innerHTML += row;
+            });
+            updateReport();
+        }
+
+        function updateShift(key, val) {
+            ROSTER[key] = val;
+            renderGrid();
+        }
+
+        function generaTurni() {
+            const m = parseInt(meseSel.value);
+            const y = 2026;
+            const daysInMonth = new Date(y, m + 1, 0).getDate();
+            const festivi = [1, 6, 115, 121, 153, 170, 227, 305, 342, 359, 360]; // Indici approssimati
+
+            ROSTER = {}; // Reset
+
+            for(let d=1; d<=daysInMonth; d++) {
+                const dt = new Date(y, m, d);
+                const isWE = dt.getDay() === 0 || dt.getDay() === 6;
+
+                // Fabbisogno
+                let turniDaAssegnare = ["G12", "G12", "G12", "N12", "N12", "N12", "G12B", "N12B", "GTI", "NTI", "GSL", "NSL"];
+
+                turniDaAssegnare.forEach(t => {
+                    // Ordina staff per ore fatte (Fairness)
+                    const sortedStaff = [...STAFF].filter(s => s.ruolo !== "Coordinatore").sort((a,b) => calcolaOreInf(a.id) - calcolaOreInf(b.id));
+
+                    for(let inf of sortedStaff) {
+                        const key = `${inf.id}-${y}-${m}-${d}`;
+                        const keyIeri = `${inf.id}-${y}-${m}-${d-1}`;
+                        
+                        if(ROSTER[key]) continue; // Già occupato
+                        if(d > 1 && ROSTER[keyIeri] && ROSTER[keyIeri].includes('N')) continue; // Riposo post-notte
+                        if(t.includes('N') && !inf.notti) continue; // Esenzione notti
+                        
+                        ROSTER[key] = t;
+                        if(t.includes('N')) {
+                            if(d+1 <= daysInMonth) ROSTER[`${inf.id}-${y}-${m}-${d+1}`] = "SN";
+                            if(d+2 <= daysInMonth) ROSTER[`${inf.id}-${y}-${m}-${d+2}`] = "R";
+                        }
+                        break;
+                    }
+                });
+
+                // Coordinatore
+                const coord = STAFF.find(s => s.ruolo === "Coordinatore");
+                if(!isWE) ROSTER[`${coord.id}-${y}-${m}-${d}`] = "G";
+            }
+            renderGrid();
+        }
+
+        function calcolaOreInf(infId) {
+            let ore = 0;
+            Object.keys(ROSTER).forEach(k => {
+                if(k.startsWith(infId + "-")) {
+                    const v = ROSTER[k];
+                    if(["G12", "N12", "G12B", "N12B", "GTI", "NTI", "GSL", "NSL"].includes(v)) ore += 12.25;
+                    if(v === "G") ore += 7.2;
+                }
+            });
+            return ore;
+        }
+
+        function updateReport() {
+            const m = parseInt(meseSel.value);
+            const y = 2026;
+            const daysInMonth = new Date(y, m + 1, 0).getDate();
+            let ggLavorativi = 0;
+            for(let d=1; d<=daysInMonth; d++) {
+                const dt = new Date(y, m, d);
+                if(dt.getDay() !== 0 && dt.getDay() !== 6) ggLavorativi++;
+            }
+            const debitoBase = ggLavorativi * 7.2;
+
+            const rep = document.getElementById('bodyReport');
+            rep.innerHTML = '';
+            STAFF.forEach(inf => {
+                const fatte = calcolaOreInf(inf.id);
+                const debito = debitoBase * (inf.pt / 100);
+                const saldo = fatte - debito;
+                rep.innerHTML += `<tr><td>${inf.nome}</td><td>${inf.pt}%</td><td>${debito.toFixed(1)}</td><td>${fatte.toFixed(1)}</td><td class="font-bold ${saldo < 0 ? 'text-red-500' : 'text-green-600'}">${saldo.toFixed(1)}</td></tr>`;
+            });
+
+            const st = document.getElementById('bodyStaff');
+            st.innerHTML = '';
+            STAFF.forEach(inf => {
+                st.innerHTML += `<tr><td>${inf.nome}</td><td>${inf.ruolo}</td><td>${inf.msa1 ? '✅' : '❌'}</td><td>${inf.notti ? '✅' : '❌'}</td><td>${inf.pt}%</td></tr>`;
+            });
+        }
+
+        function esportaExcel() {
+            const m = parseInt(meseSel.value);
+            const daysInMonth = new Date(2026, m + 1, 0).getDate();
+            let data = [["Personale", ...Array.from({length: daysInMonth}, (_, i) => i + 1)]];
+            STAFF.forEach(inf => {
+                let row = [inf.nome];
+                for(let d=1; d<=daysInMonth; d++) row.push(ROSTER[`${inf.id}-2026-${m}-${d}`] || "");
+                data.push(row);
+            });
+            const ws = XLSX.utils.aoa_to_sheet(data);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Turni");
+            XLSX.writeFile(wb, `Turni_PS_${m+1}_2026.xlsx`);
+        }
+
+        meseSel.addEventListener('change', renderGrid);
+        renderGrid();
+    </script>
+</body>
+</html>
